@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Python Game Engine with Rainbow Background</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+</head>
+<body>
+    <div id="game-container"></div>
+    <script type="text/python">
+import asyncio
+import pygame
+import random
+import platform
+from typing import List
+import math
+
+FPS = 60
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+
+class Sprite:
+    def __init__(self, x: int, y: int, width: int, height: int, color: tuple):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.color = color
+        self.velocity = [0, 0]
+
+    def move(self):
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+        
+        # Keep sprite within screen bounds
+        self.rect.clamp_ip(pygame.display.get_surface().get_rect())
+
+    def draw(self, surface: pygame.Surface):
+        pygame.draw.rect(surface, self.color, self.rect)
+
+class GameEngine:
+    def __init__(self, width: int, height: int):
+        pygame.init()
+        self.screen = pygame.display.set_mode((width, height))
+        self.sprites: List[Sprite] = []
+        self.running = True
+        self.score = 0
+
+    def add_sprite(self, sprite: Sprite):
+        self.sprites.append(sprite)
+
+    def check_collisions(self):
+        player = self.sprites[0]  # First sprite is the player
+        for sprite in self.sprites[1:]:
+            if player.rect.colliderect(sprite.rect):
+                self.running = False  # Game over on collision
+
+    def update(self):
+        for sprite in self.sprites:
+            sprite.move()
+        self.check_collisions()
+
+    def render(self):
+        # Rainbow background
+        time = pygame.time.get_ticks() / 1000.0  # Time in seconds
+        r = int((math.sin(time * 0.5 + 0) * 127) + 128)
+        g = int((math.sin(time * 0.5 + 2) * 127) + 128)
+        b = int((math.sin(time * 0.5 + 4) * 127) + 128)
+        self.screen.fill((r, g, b))
+
+        for sprite in self.sprites:
+            sprite.draw(self.screen)
+        
+        # Draw score
+        font = pygame.font.Font(None, 36)
+        score_text = font.render(f"Score: {self.score}", True, (255, 255, 255))
+        self.screen.blit(score_text, (10, 10))
+        
+        pygame.display.flip()
+
+class SampleGame:
+    def __init__(self):
+        self.engine = GameEngine(SCREEN_WIDTH, SCREEN_HEIGHT)
+        
+        # Create player
+        self.player = Sprite(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2, 30, 30, (0, 255, 0))
+        self.engine.add_sprite(self.player)
+        
+        # Spawn initial obstacles
+        self.spawn_obstacles(5)
+        self.last_spawn_time = pygame.time.get_ticks()
+        self.spawn_interval = 2000  # Spawn every 2 seconds
+
+    def spawn_obstacles(self, count: int):
+        for _ in range(count):
+            x = random.randint(0, SCREEN_WIDTH - 20)
+            y = random.randint(0, SCREEN_HEIGHT - 20)
+            obstacle = Sprite(x, y, 20, 20, (255, 0, 0))
+            obstacle.velocity = [random.choice([-2, 2]), random.choice([-2, 2])]
+            self.engine.add_sprite(obstacle)
+
+    def handle_input(self):
+        keys = pygame.key.get_pressed()
+        self.player.velocity = [0, 0]
+        if keys[pygame.K_LEFT]:
+            self.player.velocity[0] = -5
+        if keys[pygame.K_RIGHT]:
+            self.player.velocity[0] = 5
+        if keys[pygame.K_UP]:
+            self.player.velocity[1] = -5
+        if keys[pygame.K_DOWN]:
+            self.player.velocity[1] = 5
+
+    def update(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.engine.running = False
+
+        self.handle_input()
+        
+        # Spawn new obstacles periodically
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_spawn_time > self.spawn_interval:
+            self.spawn_obstacles(1)
+            self.last_spawn_time = current_time
+            self.engine.score += 10
+
+        self.engine.update()
+
+async def main():
+    game = SampleGame()
+    
+    while game.engine.running:
+        game.update()
+        game.engine.render()
+        await asyncio.sleep(1.0 / FPS)
+
+    # Game over screen
+    font = pygame.font.Font(None, 74)
+    text = font.render('Game Over', True, (255, 255, 255))
+    game.engine.screen.blit(text, (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2))
+    pygame.display.flip()
+    await asyncio.sleep(2)  # Show game over for 2 seconds
+
+if platform.system() == "Emscripten":
+    asyncio.ensure_future(main())
+else:
+    if __name__ == "__main__":
+        asyncio.run(main())
+    </script>
+    <script>
+        async function loadPyodideAndRun() {
+            let pyodide = await loadPyodide();
+            await pyodide.runPythonAsync(document.querySelector('script[type="text/python"]').text);
+        }
+        loadPyodideAndRun();
+    </script>
+</body>
+</html>
